@@ -5,5 +5,8 @@ services:
     build: .
     image: exchange-service
     network_mode: "host"
+    environment:
+      # PORT: 8081
+      GIN_MODE: release
     ports:
       - "8080:8080"

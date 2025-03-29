@@ -4,32 +4,14 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"github.com/gin-gonic/gin"
+	"golang.org/x/net/html/charset"
 	"io"
-
-	// "github.com/gin-gonic/gin"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
-
-	"golang.org/x/net/html/charset"
 )
-
-// type album struct {
-// 	ID     string  `json:"idddd"`
-// 	Title  string  `json:"title"`
-// 	Artist string  `json:"artist"`
-// 	Price  float64 `json:"price"`
-// }
-
-// var albums = []album{
-// 	{ID: "1", Title: "Blue Train", Artist: "John Coltrane", Price: 56.99},
-// 	{ID: "2", Title: "Jeru", Artist: "Gerry Mulligan", Price: 17.99},
-// 	{ID: "3", Title: "Sarah Vaughan and Clifford Brown", Artist: "Sarah Vaughan", Price: 39.99},
-// }
-
-// func getAlbums(c *gin.Context) {
-// 	c.IndentedJSON(http.StatusOK, albums)
-// }
 
 // Валюта
 type Valute struct {
@@ -100,18 +82,18 @@ func parseFloat(value string) float64 {
 	return f
 }
 
-func convert(valuteFrom string, valuteTo string, amount float64) float64 {
+func convert(valuteFrom string, valuteTo string, amount float64) (float64, error) {
 	responseBody := getDataFromCBR()
 	valutes := parseXML(responseBody).Valutes
 	amountRubles, err := convertToRUB(valutes, valuteFrom, amount)
 	if err != nil {
-		
+		return 0, err
 	}
 	result, err := convertFromRUBToValute(valutes, valuteTo, amountRubles)
 	if err != nil {
-		
+		return 0, err
 	}
-	return result
+	return result, nil
 }
 
 func convertFromRUBToValute(valutes []Valute, valuteTo string, amount float64) (float64, error) {
@@ -138,19 +120,33 @@ func convertToRUB(valutes []Valute, valuteFrom string, amount float64) (float64,
 	return 0.0, errors.New("Valute not found")
 }
 
+type ExchangeRequest struct {
+	CurrencyFrom string  `json:"currencyFrom" binding:"required"`
+	CurrencyTo   string  `json:"currencyTo" binding:"required"`
+	Amount       float64 `json:"amount" binding:"required"`
+}
+
+func getExchange(c *gin.Context) {
+	var request ExchangeRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	result, err := convert(request.CurrencyFrom, request.CurrencyTo, request.Amount)
+	if err != nil {
+		c.JSON(http.StatusNotFound, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"amount": result})
+}
+
 func main() {
-	valuteFrom := "USD"
-	valuteTo := "EUR1"
-	var amount float64 = 1000
-	result := convert(valuteFrom, valuteTo, amount)
-
-	fmt.Printf("%.4f %s = %.4f %s\n", amount, valuteFrom, result, valuteTo)
-
-
-	// fmt.Println(string(body))
-
-	// router := gin.Default()
-	// router.GET("/albums", getAlbums)
-	// router.Run("localhost:8080")
-	// fmt.Println("server is running on port 8080weweq")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	router := gin.Default()
+	router.GET("/exchange", getExchange)
+	router.Run(":" + port)
+	fmt.Println("server is running on port", port)
 }
