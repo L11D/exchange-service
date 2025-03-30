@@ -94,7 +94,7 @@ func convert(valuteFrom string, valuteTo string, amount float64) (float64, float
 	if err != nil {
 		return 0, 0, err
 	}
-	return result, result/amount, nil
+	return result, amount/result, nil
 }
 
 func convertFromRUBToValute(valutes []Valute, valuteTo string, amount float64) (float64, error) {
@@ -159,7 +159,7 @@ func main() {
 		port = "8080"
 	}
 	router := gin.Default()
-	router.GET("/exchange", getExchange)
+	router.POST("/exchange", getExchange)
 	router.GET("/currencies", getCurrency)
 	router.Run(":" + port)
 	fmt.Println("server is running on port", port)
