@@ -4,13 +4,14 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"golang.org/x/net/html/charset"
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
+	"github.com/gin-gonic/gin"
+	"golang.org/x/net/html/charset"
 )
 
 // Валюта
@@ -82,18 +83,18 @@ func parseFloat(value string) float64 {
 	return f
 }
 
-func convert(valuteFrom string, valuteTo string, amount float64) (float64, error) {
+func convert(valuteFrom string, valuteTo string, amount float64) (float64, float64, error) {
 	responseBody := getDataFromCBR()
 	valutes := parseXML(responseBody).Valutes
 	amountRubles, err := convertToRUB(valutes, valuteFrom, amount)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	result, err := convertFromRUBToValute(valutes, valuteTo, amountRubles)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return result, nil
+	return result, result/amount, nil
 }
 
 func convertFromRUBToValute(valutes []Valute, valuteTo string, amount float64) (float64, error) {
@@ -132,12 +133,24 @@ func getExchange(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	result, err := convert(request.CurrencyFrom, request.CurrencyTo, request.Amount)
+	result, rate, err := convert(request.CurrencyFrom, request.CurrencyTo, request.Amount)
 	if err != nil {
 		c.JSON(http.StatusNotFound, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"amount": result})
+	c.JSON(http.StatusOK, gin.H{"amount": result, "rate": rate})
+}
+
+func getCurrency(c *gin.Context) {
+	responseBody := getDataFromCBR()
+	valutes := parseXML(responseBody).Valutes
+	var valutesNames []string
+	valutesNames = append(valutesNames, "RUB")
+	for _, valute := range valutes {
+		valutesNames = append(valutesNames, valute.CharCode)
+	}
+	sort.Strings(valutesNames)
+	c.JSON(http.StatusOK, valutesNames)
 }
 
 func main() {
@@ -147,6 +160,7 @@ func main() {
 	}
 	router := gin.Default()
 	router.GET("/exchange", getExchange)
+	router.GET("/currencies", getCurrency)
 	router.Run(":" + port)
 	fmt.Println("server is running on port", port)
 }
